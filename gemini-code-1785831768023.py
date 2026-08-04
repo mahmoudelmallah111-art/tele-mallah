@@ -56,7 +56,7 @@ USERS_FILE = "users_db.json"
 HISTORY_FILE = "sent_history.txt"
 
 ADMIN_USERNAME = "m7mallah"
-ADMIN_IDS = [790214811]  # يمكنك إضافة آيدي حسابك هنا
+ADMIN_IDS = [790214811]
 
 default_config = {
     "target": "@playpoint_rewards",
@@ -91,7 +91,6 @@ def is_admin_user(sender):
 # نظام الحفظ والمزامنة السحابية مع GitHub (للحفاظ على الجلسات)
 # ---------------------------------------------------------
 def sync_to_github(file_path):
-    """رفع الملفات تلقائياً إلى GitHub للحفاظ على الجلسات والإعدادات"""
     if not GITHUB_TOKEN or not GITHUB_REPO or not os.path.exists(file_path):
         return
     try:
@@ -122,7 +121,6 @@ def sync_to_github(file_path):
         print(f"GitHub Sync Error ({file_path}): {e}")
 
 def restore_from_github(file_path):
-    """تنزيل ملفات الجلسات والإعدادات من GitHub عند بدء التشغيل"""
     if not GITHUB_TOKEN or not GITHUB_REPO:
         return
     try:
@@ -130,7 +128,7 @@ def restore_from_github(file_path):
         req = urllib.request.Request(url, headers={"Authorization": f"token {GITHUB_TOKEN}"})
         with urllib.request.urlopen(req) as response:
             res_data = json.loads(response.read().decode())
-            content = base64.b64decode(res_data["content"])
+            content = base64.b64encode(res_data["content"])
             with open(file_path, "wb") as f:
                 f.write(content)
             print(f"✅ تم استرجاع الملف بنجاح: {file_path}")
@@ -530,7 +528,7 @@ async def cb_handler(event):
         task = asyncio.create_task(run_extraction_and_save_task(progress_msg, cfg))
         active_tasks[progress_msg.chat_id] = task
 
-    elif data == "save_contacts_old" or data == "save_contacts_new" or data == "save_contacts_custom":
+    elif data in ("save_contacts_old", "save_contacts_new", "save_contacts_custom"):
         users_list = extracted_cache.get(event.chat_id)
         if not users_list:
             await event.answer("⚠️ انتهت صلاحية الجلسة المؤقتة، يرجى إعادة الاستخراج.", alert=True)
@@ -548,35 +546,76 @@ async def cb_handler(event):
 
         session_name = "session_save_" + phone.replace("+", "")
 
-        try: await event.edit(f"🔄 جاري الاتصال بحساب ({account_label}) لحفظ الأرقام...")
+        try: await event.edit(f"🔄 جاري الاتصال بحساب ({account_label}) لبدء الحفظ الحقيقي...")
         except Exception: pass
         msg_obj = await event.get_message()
+        
         try:
             client = TelegramClient(session_name, API_ID, API_HASH)
             await interactive_login(client, phone, account_label, msg_obj)
 
             added_contacts = 0
+            failed_contacts = 0
+            total_users = len(users_list)
+            last_update = time.time()
+            stop_btn = [[Button.inline("🛑 إيقاف عملية الحفظ", data="stop_act")]]
+
             for idx, u in enumerate(users_list, 1):
-                if getattr(u, "phone", None):
+                try:
+                    user_phone = getattr(u, "phone", "") or ""
+                    first_name = getattr(u, "first_name", "") or "User"
+                    last_name = getattr(u, "last_name", "") or ""
+
+                    await client(AddContactRequest(
+                        id=u,
+                        first_name=first_name,
+                        last_name=last_name,
+                        phone=user_phone,
+                        add_phone_privacy_exception=False
+                    ))
+                    added_contacts += 1
+
+                except FloodWaitError as e:
+                    await asyncio.sleep(e.seconds + 2)
                     try:
                         await client(AddContactRequest(
-                            id=u.id,
-                            first_name=u.first_name or "مستخدم",
-                            last_name=u.last_name or "",
-                            phone=u.phone
+                            id=u,
+                            first_name=first_name,
+                            last_name=last_name,
+                            phone=user_phone,
+                            add_phone_privacy_exception=False
                         ))
                         added_contacts += 1
-                    except FloodWaitError as e: await asyncio.sleep(e.seconds)
+                    except Exception:
+                        failed_contacts += 1
+
+                except Exception:
+                    failed_contacts += 1
+
+                if time.time() - last_update >= 3.0 or idx == total_users:
+                    last_update = time.time()
+                    try:
+                        await event.edit(
+                            f"📇 **جاري حفظ جهات الاتصال فعلياً...**\n"
+                            f"• التقدم: `{idx}/{total_users}`\n"
+                            f"• ✅ تم الحفظ بنجاح: `{added_contacts}`\n"
+                            f"• ❌ تعذر (قيود/خطأ): `{failed_contacts}`",
+                            buttons=stop_btn,
+                            parse_mode="markdown"
+                        )
                     except Exception: pass
-                if idx % 50 == 0 or idx == len(users_list):
-                    try: await event.edit(f"📇 جاري الحفظ في جهات اتصال ({account_label})... ({idx}/{len(users_list)})")
-                    except FloodWaitError as e: await asyncio.sleep(e.seconds)
-                    except Exception: pass
+
+                await asyncio.sleep(0.3)
 
             await client.disconnect()
             extracted_cache.pop(event.chat_id, None)
+
             await event.edit(
-                f"✅ **تم حفظ الأرقام بنجاح في حساب ({account_label})!**\n• تمت إضافة **{added_contacts}** رقم جديد إلى جهات الاتصال.",
+                f"✅ **اكتملت عملية الحفظ بحساب ({account_label})!**\n\n"
+                f"📊 **التقرير النهائي الفعلي:**\n"
+                f"• 🎯 تم حفظهم كجهات اتصال: `{added_contacts}`\n"
+                f"• ⚠️ فشل / قيود الخصوصية: `{failed_contacts}`\n"
+                f"• 👥 إجمالي المفحوصين: `{total_users}`",
                 buttons=[[Button.inline("🔙 القائمة الرئيسية", data="back_home")]],
                 parse_mode="markdown"
             )
@@ -695,10 +734,6 @@ async def message_handler(event):
             return
 
 async def interactive_login(client, phone, account_label, progress_msg):
-    """
-    تسجيل دخول تفاعلي ذكي:
-    يحفظ الجلسة في ملف .session ويرفعه تلقائياً لـ GitHub لمنع إعادة طلب الكود.
-    """
     session_file_path = f"{client.session.filename}"
     restore_from_github(session_file_path)
 
@@ -767,7 +802,6 @@ async def interactive_login(client, phone, account_label, progress_msg):
                     await asyncio.sleep(3)
                     continue
 
-    # بعد نجاح التوثيق، يتم حفظ وتأمين الجلسة سحابياً
     sync_to_github(session_file_path)
 
 async def safe_edit(msg, text, buttons=None):
