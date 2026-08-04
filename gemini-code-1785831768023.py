@@ -109,7 +109,7 @@ def restore_from_github(file_path):
         req = urllib.request.Request(url, headers={"Authorization": f"token {GITHUB_TOKEN}"})
         with urllib.request.urlopen(req) as response:
             res_data = json.loads(response.read().decode())
-            content = base64.b64encode(res_data["content"])
+            content = base64.b64decode(res_data["content"])
             with open(file_path, "wb") as f:
                 f.write(content)
             print(f"✅ تم استرجاع الملف بنجاح: {file_path}")
@@ -171,7 +171,7 @@ def load_user_profile(user_id):
         },
         "extracted_members": {},  # {str(user_id): {"id": int, "username": str, "first_name": str, "phone": str}}
         "history_sent": [],       # [user_id_int, ...]
-        "operations_log": []
+        "operations_log": []      # سجل العمليات الذكي (ميزة متقدمة وصادمة)
     }
     if os.path.exists(file_path):
         try:
@@ -199,7 +199,7 @@ print("🔄 جاري تهيئة نظام التشغيل والمكونات...")
 bot = TelegramClient("bot_session_main", API_ID, API_HASH)
 
 # =========================================================
-# 3) الواجهات والأدوات المساعدة
+# 3) الواجهات والأدوات المساعدة (بترتيب امتحاني ودقيق)
 # =========================================================
 async def show_loading(msg, text):
     for i in range(3):
@@ -252,12 +252,13 @@ async def render_main_menu(event, is_edit=False, is_adm=False):
         pending_count = sum(1 for u in users.values() if u.get("status") == "pending")
         buttons.append([Button.inline(f"👥 إدارة طلبات المستخدمين ({pending_count} معلق)", data="admin_requests_panel")])
 
+    # ترتيب امتحاني منظم ومفصّل لأزرار القائمة الرئيسية
     buttons.extend([
-        [Button.inline("📥 1. معالج استخراج الأرقام (تصفية التكرار تلقائياً)", data="menu_extract_save")],
-        [Button.inline("🚀 2. معالج الإرسال والإضافة التلقائية", data="menu_actions_wizard")],
+        [Button.inline("📥 1. معالج استخراج الأرقام والتصفية الذكية", data="menu_extract_save")],
+        [Button.inline("🚀 2. معالج الإرسال والإضافة من الذاكرة", data="menu_actions_wizard")],
         [Button.inline(f"📁 3. إدارة الأرقام المحفوظة بالذاكرة ({saved_count} عضو)", data="view_saved_database")],
         [Button.inline("💾 4. تعيين رقم مخصص لحفظ الأرقام", data="manual_save_contacts")],
-        [Button.inline("📊 عرض الإعدادات الحالية", data="show_settings")],
+        [Button.inline("📊 5. الإعدادات وسجل العمليات الذكي ⚡", data="show_settings")],
     ])
 
     text = "🌟 **لوحة تحكم البوت الاحترافية الذكية (النظام المطور)** 🌟\n\nاختر المعالج أو الإجراء المطلوب للبدء:"
@@ -322,7 +323,7 @@ async def render_wizard_act(event, sender_id, step):
     user_states[sender_id].update({"wizard": "act", "step": step})
 
     if step == 1:
-        text = f"🚀 **معالج الإرسال والإضافة (الخطوة 1 من 4)**\n\n📱 **حساب السحب:**\nأرسل رقم هاتف الحساب القديم (المسحوب منه جهات الاتصال).\n\n🔗 القيمة الحالية: `{cfg.get('old_phone') or 'غير محدد'}`"
+        text = f"🚀 **معالج الإرسال والإضافة (الخطوة 1 من 4)**\n\n📱 **حساب السحب:**\nأرسل رقم هاتف الحساب القديم (المسحوب منه جهات الاتصال سابقاً).\n\n🔗 القيمة الحالية: `{cfg.get('old_phone') or 'غير محدد'}`"
         buttons = [
             [Button.inline("التالي ➡️", data="wiz_act_next_2")],
             [Button.inline("🔙 إلغاء والقائمة الرئيسية", data="back_home")]
@@ -346,10 +347,11 @@ async def render_wizard_act(event, sender_id, step):
             [Button.inline("🔙 إلغاء والقائمة الرئيسية", data="back_home")]
         ]
     elif step == 5:
-        text = f"📋 **مراجعة بيانات الإرسال والإضافة النهائية:**\n\n• حساب السحب: `{cfg.get('old_phone', 'غير محدد')}`\n• حساب الإدارة: `{cfg.get('new_phone', 'غير محدد')}`\n• الوجهة المستهدفة: `{cfg.get('target', 'غير محدد')}`\n• رسالة الدعوة:\n`{cfg.get('message', 'غير محدد')}`\n\nهل أنت متأكد من بدء عملية الإرسال والإضافة التلقائية؟"
+        saved_db_count = len(profile.get("extracted_members", {}))
+        text = f"📋 **مراجعة بيانات الإرسال والإضافة النهائية (من الذاكرة):**\n\n• الأعضاء المتاحين بذاكرتك: `{saved_db_count}` عضواً\n• حساب الإدارة: `{cfg.get('new_phone', 'غير محدد')}`\n• الوجهة المستهدفة: `{cfg.get('target', 'غير محدد')}`\n• رسالة الدعوة:\n`{cfg.get('message', 'غير محدد')}`\n\nهل أنت متأكد من بدء عملية الإرسال والإضافة من الذاكرة؟"
         buttons = [
             [Button.inline("⬅️ تعديل البيانات", data="wiz_act_prev_4")],
-            [Button.inline("▶️ تأكيد وبدء التنفيذ الفوري", data="add_run")],
+            [Button.inline("▶️ تأكيد وبدء التنفيذ الفوري من الذاكرة", data="add_run")],
             [Button.inline("🔙 إلغاء والقائمة الرئيسية", data="back_home")]
         ]
 
@@ -385,7 +387,6 @@ async def start_cmd(event):
         }
         save_users_db(users_db)
 
-        # إرسال إشعار للمشرف يحتوي على أزرار تفاعلية فورية للموافقة والرفض
         admin_buttons = [
             [
                 Button.inline("✅ قبول المستخدم", data=f"fast_approve_{sender_id_str}"),
@@ -429,7 +430,6 @@ async def cb_handler(event):
 
     data = event.data.decode("utf-8")
 
-    # معالجة الموافقة والرفض المباشر من رسائل المشرف
     if is_adm and (data.startswith("fast_approve_") or data.startswith("fast_reject_")):
         parts = data.split("_")
         action = parts[1]
@@ -469,7 +469,7 @@ async def cb_handler(event):
     if data == "stop_ext_confirmed":
         chat_id = event.chat_id
         if chat_id in active_tasks: active_tasks[chat_id].cancel()
-        try: await event.edit("⏳ **تم إيقاف الاستخراج فوراً!**\nجاري حفظ وتصفية الأرقام المستخرجة...", buttons=None, parse_mode="markdown")
+        try: await event.edit("⏳ **تم إيقاف الاستخراج فوراً!**\nجاري حفظ وتصفية والأرقام المستخرجة...", buttons=None, parse_mode="markdown")
         except Exception: pass
         await event.answer("⚠️ تم إيقاف الاستخراج بنجاح!", alert=True)
         return
@@ -714,15 +714,18 @@ async def cb_handler(event):
         await event.edit("✅ **تم الانتهاء وتخطي حفظ الأرقام.**", buttons=[[Button.inline("🔙 القائمة الرئيسية", data="back_home")]], parse_mode="markdown")
 
     elif data == "add_run":
-        if not cfg.get("old_phone") or not cfg.get("new_phone"):
-            await event.answer("⚠️ يرجى تعيين أرقام الحسابات أولاً!", alert=True)
+        if not cfg.get("new_phone"):
+            await event.answer("⚠️ يرجى تعيين رقم حساب الإدارة أولاً!", alert=True)
             return
         user_states.pop(sender_int_id, None)
-        progress_msg = await event.respond("🚀 جاري التحضير لعمليات الإرسال والإضافة...")
+        progress_msg = await event.respond("🚀 جاري التحضير لعمليات الإرسال والإضافة من الذاكرة...")
         task = asyncio.create_task(run_automation_task(progress_msg, sender_int_id))
         active_tasks[progress_msg.chat_id] = task
 
     elif data == "show_settings":
+        # لمسة إبداعية متقدمة: عرض سجل العمليات الذكي المصغر وإحصائيات الذاكرة
+        logs = profile.get("operations_log", [])
+        last_log = logs[-1] if logs else "لا توجد عمليات سابقة مسجلة"
         try:
             await event.edit(
                 "📊 **الإعدادات وقاعدة البيانات الحالية:**\n\n"
@@ -732,7 +735,8 @@ async def cb_handler(event):
                 f"📱 حساب الإدارة: `{cfg.get('new_phone') or 'غير محدد'}`\n"
                 f"📱 رقم الحفظ المخصص: `{cfg.get('custom_save_phone') or 'غير محدد'}`\n"
                 f"💬 حد الرسائل: `{cfg.get('message_limit', 0)}`\n"
-                f"📁 الأعضاء المسجلين بذاكرتك: `{len(profile.get('extracted_members', {}))}` عضواً",
+                f"📁 الأعضاء المسجلين بذاكرتك: `{len(profile.get('extracted_members', {}))}` عضواً\n"
+                f"⚡ **آخر نشاط مسجل:** `{last_log}`",
                 buttons=[[Button.inline("🔙 القائمة الرئيسية", data="back_home")]],
                 parse_mode="markdown"
             )
@@ -989,10 +993,12 @@ async def run_extraction_and_save_task(progress_msg, user_id):
             except Exception: pass
         active_tasks.pop(progress_msg.chat_id, None)
 
-    # حفظ الأعضاء الجدد في ذاكرة المستخدم الدائمة
     if newly_extracted:
         saved_members.update(newly_extracted)
         profile["extracted_members"] = saved_members
+        # تسجيل النشاط تلقائياً في السجل الذكي (ميزة متقدمة)
+        if "operations_log" not in profile: profile["operations_log"] = []
+        profile["operations_log"].append(f"استخراج {len(newly_extracted)} عضو من {extract_source}")
         save_user_profile(user_id, profile)
 
     total_in_db = len(saved_members)
@@ -1024,33 +1030,26 @@ async def run_extraction_and_save_task(progress_msg, user_id):
         buttons=buttons,
     )
 
+# =========================================================
+# الأمر الثاني المحدث: الاعتماد الكامل على الذاكرة الدائمة والتعامل الدقيق بالمعرفات
+# =========================================================
 async def run_automation_task(progress_msg, user_id):
     profile = load_user_profile(user_id)
     cfg = profile["config"]
-    old_phone = cfg["old_phone"].strip()
     new_phone = cfg["new_phone"].strip()
     target_group = clean_target(cfg.get("target"))
     invitation_message = cfg["message"]
 
-    session_old = "session_old_" + old_phone.replace("+", "")
+    ext_members = profile.get("extracted_members", {})
+    if not ext_members:
+        await progress_msg.edit("❌ لا توجد أعضاء مخزنة في ذاكرتك! قم بعملية الاستخراج أولاً لحفظهم بالذاكرة.")
+        return
+
     session_new = "session_new_" + new_phone.replace("+", "")
-    client_old = None
     client_new = None
 
     try:
-        await show_loading(progress_msg, "جاري الاتصال بحساب السحب وقراءة الأرقام")
-        client_old = TelegramClient(session_old, API_ID, API_HASH)
-        await interactive_login(client_old, old_phone, "السحب", progress_msg)
-
-        contacts_result = await client_old(GetContactsRequest(hash=0))
-        contacts_list = [u for u in contacts_result.users if isinstance(u, User) and not getattr(u, "bot", False)]
-        await client_old.disconnect()
-
-        if not contacts_list:
-            await progress_msg.edit("❌ لا توجد جهات اتصال مسحوبة في الحساب القديم!")
-            return
-
-        await show_loading(progress_msg, "جاري الانتقال لحساب الإدارة وبدء الإضافة")
+        await show_loading(progress_msg, "جاري الاتصال بحساب الإدارة وبدء الإرسال والإضافة من الذاكرة")
         client_new = TelegramClient(session_new, API_ID, API_HASH)
         await interactive_login(client_new, new_phone, "الإدارة", progress_msg)
 
@@ -1070,10 +1069,15 @@ async def run_automation_task(progress_msg, user_id):
         except Exception: pass
 
         sent_history_set = set(profile.get("history_sent", []))
-        users_to_process = [u for u in contacts_list if u.id not in existing_members_ids and u.id not in sent_history_set]
+        
+        users_to_process = []
+        for u_data in ext_members.values():
+            uid = u_data["id"]
+            if uid not in existing_members_ids and uid not in sent_history_set:
+                users_to_process.append(u_data)
 
         if not users_to_process:
-            await progress_msg.edit("🎉 جميع المستخدمين تمت معالجتهم مسبقاً أو موجودون بالوجهة!")
+            await progress_msg.edit("🎉 جميع الأعضاء المحفوظين في الذاكرة تمت معالجتهم مسبقاً أو موجودون بالوجهة!")
             await client_new.disconnect()
             return
 
@@ -1084,18 +1088,21 @@ async def run_automation_task(progress_msg, user_id):
 
         stop_btn = [[Button.inline("🛑 إيقاف العملية الحالية", data="stop_act")]]
 
-        for idx, u in enumerate(users_to_process, 1):
-            uid = u.id
+        for idx, u_data in enumerate(users_to_process, 1):
+            uid = u_data["id"]
+            # التعامل الدقيق باليوزر إن وجد، وإلا فالـ ID منعاً لأي تشتت
+            target_identifier = u_data["username"] if u_data.get("username") else uid
+
             try:
                 if is_broadcast_channel:
-                    await client_new.send_message(uid, invitation_message)
+                    await client_new.send_message(target_identifier, invitation_message)
                     msg_sent_count += 1
                 else:
                     try:
-                        await client_new(InviteToChannelRequest(target_group, [uid]))
+                        await client_new(InviteToChannelRequest(target_group, [target_identifier]))
                         added_count += 1
                     except Exception:
-                        await client_new.send_message(uid, invitation_message)
+                        await client_new.send_message(target_identifier, invitation_message)
                         msg_sent_count += 1
 
                 sent_history_set.add(uid)
@@ -1105,7 +1112,7 @@ async def run_automation_task(progress_msg, user_id):
                 if idx % 10 == 0 or idx == total_users:
                     try:
                         await progress_msg.edit(
-                            f"🚀 **جارٍ التنفيذ...** ({idx}/{total_users})\n• رسائل: `{msg_sent_count}`\n• إضافات مباشرة: `{added_count}`",
+                            f"🚀 **جارٍ التنفيذ من الذاكرة...** ({idx}/{total_users})\n• رسائل: `{msg_sent_count}`\n• إضافات مباشرة: `{added_count}`",
                             buttons=stop_btn,
                             parse_mode="markdown"
                         )
@@ -1123,8 +1130,13 @@ async def run_automation_task(progress_msg, user_id):
 
         if client_new: await client_new.disconnect()
 
+        # تسجيل النشاط في السجل الذكي
+        if "operations_log" not in profile: profile["operations_log"] = []
+        profile["operations_log"].append(f"إرسال وإضافة من الذاكرة: نجاح {added_count + msg_sent_count}")
+        save_user_profile(user_id, profile)
+
         await progress_msg.edit(
-            f"🎉 **انتهت العملية بنجاح!**\n\n📊 **التقرير النهائي:**\n• الرسائل المرسلة: `{msg_sent_count}`\n• الإضافات المباشرة: `{added_count}`\n• الأخطاء: `{failed_count}`",
+            f"🎉 **انتهت عملية الإرسال والإضافة من الذاكرة بنجاح!**\n\n📊 **التقرير النهائي:**\n• الرسائل المرسلة: `{msg_sent_count}`\n• الإضافات المباشرة: `{added_count}`\n• الأخطاء: `{failed_count}`",
             parse_mode="markdown"
         )
 
