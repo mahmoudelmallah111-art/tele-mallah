@@ -23,7 +23,7 @@ from telethon.tl.functions.contacts import AddContactRequest, GetContactsRequest
 from telethon.tl.types import User
 
 # =========================================================
-# 1) خادم ويب وهمي لإبقاء الخدمة شغالة
+# 1) خادم ويب وهمي لإبقاء الخدمة شغالة على Render
 # =========================================================
 class DummyHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -42,15 +42,15 @@ def run_dummy_server():
 threading.Thread(target=run_dummy_server, daemon=True).start()
 
 # =========================================================
-# 2) إعدادات المكونات وحفظ البيانات على GitHub
+# 2) إعدادات المكونات والربط مع GitHub
 # =========================================================
 API_ID = 28513802
 API_HASH = "fe0ef7e83635cdd89512e833c0ddcb28"
 BOT_TOKEN = "8996749859:AAF6WPtVQrBrDw9N84Irf78kIF2GWYdeUYw"
 
-# إعدادات GitHub لحفظ البيانات (اختياري: ضع البيانات لو أحببت الربط الحقيقي)
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "") # ضع Personal Access Token هنا
-GITHUB_REPO = os.environ.get("GITHUB_REPO", "")   # مثال: "username/repo_name"
+# ضع التوكين الخاص بك بين التنصيص هنا مباشرة
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "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") 
+GITHUB_REPO = os.environ.get("GITHUB_REPO", "mahmoudelmallah111-art/data-tele-mallah")
 
 CONFIG_FILE = "bot_config.json"
 USERS_FILE = "users_db.json"
@@ -78,15 +78,14 @@ user_states = {}
 auth_futures = {}
 
 def sync_to_github(file_path):
-    """رفع الملفات إلى GitHub للحفاظ على البيانات بدون فقدان"""
-    if not GITHUB_TOKEN or not GITHUB_REPO:
+    """رفع الملفات تلقائياً إلى مستودع GitHub الحافظ للبيانات"""
+    if not GITHUB_TOKEN or GITHUB_TOKEN == "ضع_التوكين_الخاص_بك_هنا" or not GITHUB_REPO:
         return
     try:
         url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{file_path}"
         with open(file_path, "rb") as f:
             content = base64.b64encode(f.read()).decode("utf-8")
         
-        # جلب الـ sha إذا كان الملف موجوداً
         req = urllib.request.Request(url, headers={"Authorization": f"token {GITHUB_TOKEN}"})
         sha = None
         try:
@@ -161,7 +160,7 @@ def save_users(users):
 bot = TelegramClient("bot_session_main", API_ID, API_HASH)
 
 # =========================================================
-# 3) واجهات وأدوات المساعد
+# 3) الواجهات والأدوات المساعدة
 # =========================================================
 async def safe_edit(msg, text, buttons=None):
     while True:
@@ -351,7 +350,7 @@ async def message_handler(event):
             await render_wizard_ext(event, sender_id, 4)
 
 # =========================================================
-# 5) المهام الأساسية
+# 5) المهام التنفيذية
 # =========================================================
 async def interactive_login(client, phone, account_label, progress_msg):
     await client.connect()
@@ -397,7 +396,6 @@ async def run_extraction_task(progress_msg, cfg):
     users_list = list(users_map.values())
     extracted_cache[progress_msg.chat_id] = users_list
 
-    # ترتيب الأزرار فور انتهاء الاستخراج مباشرة
     buttons = [
         [Button.inline("💾 حفظ جهات الاتصال في رقم محدد", data="manual_save_contacts")],
         [Button.inline("🚀 الانتقال للإضافة المباشرة", data="menu_actions_wizard")],
