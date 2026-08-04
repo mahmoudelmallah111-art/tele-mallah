@@ -1,11 +1,11 @@
 import asyncio
+import base64
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import os
 import random
-import time
 import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import base64
+import time
 import urllib.request
 
 from telethon import Button, TelegramClient, events
@@ -14,9 +14,9 @@ from telethon.errors import (
     PhoneCodeExpiredError,
     PhoneCodeInvalidError,
     SessionPasswordNeededError,
-    UserPrivacyRestrictedError,
-    UserNotMutualContactError,
     UserChannelsTooMuchError,
+    UserNotMutualContactError,
+    UserPrivacyRestrictedError,
 )
 from telethon.tl.functions.channels import InviteToChannelRequest
 from telethon.tl.functions.contacts import AddContactRequest, GetContactsRequest
@@ -42,7 +42,7 @@ def run_dummy_server():
 threading.Thread(target=run_dummy_server, daemon=True).start()
 
 # =========================================================
-# 2) إعدادات المكونات والربط مع GitHub
+# 2) إعدادات المتغيرات الأساسية والربط مع GitHub
 # =========================================================
 API_ID = 28513802
 API_HASH = "fe0ef7e83635cdd89512e833c0ddcb28"
@@ -56,7 +56,7 @@ USERS_FILE = "users_db.json"
 HISTORY_FILE = "sent_history.txt"
 
 ADMIN_USERNAME = "m7mallah"
-ADMIN_IDS = [790214811, 563456789]  # ضع آيدي حسابك هنا للتأكيد المطلق
+ADMIN_IDS = [790214811]  # يمكنك إضافة آيدي حسابك هنا
 
 default_config = {
     "target": "@playpoint_rewards",
@@ -87,9 +87,12 @@ def is_admin_user(sender):
         return True
     return False
 
+# ---------------------------------------------------------
+# نظام الحفظ والمزامنة السحابية مع GitHub (للحفاظ على الجلسات)
+# ---------------------------------------------------------
 def sync_to_github(file_path):
-    """رفع الملفات تلقائياً إلى مستودع GitHub الحافظ للبيانات"""
-    if not GITHUB_TOKEN or not GITHUB_REPO:
+    """رفع الملفات تلقائياً إلى GitHub للحفاظ على الجلسات والإعدادات"""
+    if not GITHUB_TOKEN or not GITHUB_REPO or not os.path.exists(file_path):
         return
     try:
         url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{file_path}"
@@ -104,10 +107,7 @@ def sync_to_github(file_path):
         except Exception:
             pass
 
-        data = {
-            "message": f"Auto-update {file_path}",
-            "content": content
-        }
+        data = {"message": f"Auto-sync {file_path}", "content": content}
         if sha:
             data["sha"] = sha
 
@@ -119,7 +119,23 @@ def sync_to_github(file_path):
         )
         urllib.request.urlopen(req)
     except Exception as e:
-        print(f"GitHub Sync Error: {e}")
+        print(f"GitHub Sync Error ({file_path}): {e}")
+
+def restore_from_github(file_path):
+    """تنزيل ملفات الجلسات والإعدادات من GitHub عند بدء التشغيل"""
+    if not GITHUB_TOKEN or not GITHUB_REPO:
+        return
+    try:
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{file_path}"
+        req = urllib.request.Request(url, headers={"Authorization": f"token {GITHUB_TOKEN}"})
+        with urllib.request.urlopen(req) as response:
+            res_data = json.loads(response.read().decode())
+            content = base64.b64decode(res_data["content"])
+            with open(file_path, "wb") as f:
+                f.write(content)
+            print(f"✅ تم استرجاع الملف بنجاح: {file_path}")
+    except Exception:
+        pass
 
 def clean_target(raw_input):
     if not raw_input:
@@ -134,6 +150,7 @@ def clean_target(raw_input):
 
 def load_config():
     cfg = default_config.copy()
+    restore_from_github(CONFIG_FILE)
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -151,6 +168,7 @@ def save_config(cfg):
         print(f"Error saving config: {e}")
 
 def load_users():
+    restore_from_github(USERS_FILE)
     if os.path.exists(USERS_FILE):
         try:
             with open(USERS_FILE, "r", encoding="utf-8") as f:
@@ -166,6 +184,8 @@ def save_users(users):
         sync_to_github(USERS_FILE)
     except Exception as e:
         print(f"Error saving users: {e}")
+
+restore_from_github(HISTORY_FILE)
 
 print("🔄 جاري تهيئة نظام التشغيل والمكونات...")
 bot = TelegramClient("bot_session_main", API_ID, API_HASH)
@@ -225,7 +245,7 @@ async def render_main_menu(event, is_edit=False, is_adm=False):
     buttons.extend([
         [Button.inline("📥 1. معالج استخراج وحفظ الأرقام (خطوة بخطوة)", data="menu_extract_save")],
         [Button.inline("🚀 2. معالج الإرسال والإضافة التلقائية (خطوة بخطوة)", data="menu_actions_wizard")],
-        [Button.inline("💾 3. حفظ جهات الاتصال في رقم محدد", data="manual_save_contacts")],
+        [Button.inline("💾 3. تعيين رقم مخصص لحفظ الأرقام", data="manual_save_contacts")],
         [Button.inline("📊 عرض الإعدادات الحالية", data="show_settings")],
     ])
 
@@ -467,10 +487,8 @@ async def cb_handler(event):
 
     elif data == "menu_extract_save":
         await render_wizard_ext(event, sender_int_id, 1)
-    elif data == "wiz_ext_next_2":
-        await render_wizard_ext(event, sender_int_id, 2)
-    elif data == "wiz_ext_next_3":
-        await render_wizard_ext(event, sender_int_id, 3)
+    elif data == "wiz_ext_next_2": await render_wizard_ext(event, sender_int_id, 2)
+    elif data == "wiz_ext_next_3": await render_wizard_ext(event, sender_int_id, 3)
     elif data == "wiz_ext_next_4":
         if not cfg.get("extract_source") or not cfg.get("old_phone"):
             await event.answer("⚠️ يرجى إدخال جروب الاستخراج ورقم حساب السحب أولاً!", alert=True)
@@ -596,7 +614,7 @@ async def cb_handler(event):
         except Exception: pass
 
 # =========================================================
-# 5) استقبال واستجابة الرسائل
+# 5) استقبال واستجابة الرسائل وتوثيق الجلسات
 # =========================================================
 @bot.on(events.NewMessage)
 async def message_handler(event):
@@ -631,7 +649,7 @@ async def message_handler(event):
         cfg["custom_save_phone"] = text
         save_config(cfg)
         user_states[sender_id].pop("wizard", None)
-        await event.respond(f"✅ **تم حفظ الرقم المخصص للحفظ نجاح:** `{text}`", buttons=[[Button.inline("🔙 القائمة الرئيسية", data="back_home")]])
+        await event.respond(f"✅ **تم حفظ الرقم المخصص للحفظ بنجاح:** `{text}`", buttons=[[Button.inline("🔙 القائمة الرئيسية", data="back_home")]])
         return
 
     if "wizard" in state_info and state_info["wizard"] == "ext":
@@ -677,6 +695,13 @@ async def message_handler(event):
             return
 
 async def interactive_login(client, phone, account_label, progress_msg):
+    """
+    تسجيل دخول تفاعلي ذكي:
+    يحفظ الجلسة في ملف .session ويرفعه تلقائياً لـ GitHub لمنع إعادة طلب الكود.
+    """
+    session_file_path = f"{client.session.filename}"
+    restore_from_github(session_file_path)
+
     await client.connect()
     if not await client.is_user_authorized():
         chat_id = progress_msg.chat_id
@@ -707,7 +732,7 @@ async def interactive_login(client, phone, account_label, progress_msg):
                 await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
                 break
             except PhoneCodeExpiredError:
-                try: await progress_msg.edit("❌ **انتهت صلاحية الكود (Code Expired).**\n🔄 جاري إرسال كود جديد تلقائياً، استعد لإدخاله...")
+                try: await progress_msg.edit("❌ **انتهت صلاحية الكود (Code Expired).**\n🔄 جاري إرسال كود جديد تلقائياً...")
                 except Exception: pass
                 await asyncio.sleep(2)
                 continue
@@ -741,6 +766,9 @@ async def interactive_login(client, phone, account_label, progress_msg):
                     except Exception: pass
                     await asyncio.sleep(3)
                     continue
+
+    # بعد نجاح التوثيق، يتم حفظ وتأمين الجلسة سحابياً
+    sync_to_github(session_file_path)
 
 async def safe_edit(msg, text, buttons=None):
     while True:
@@ -916,6 +944,7 @@ async def run_automation_task(progress_msg, cfg):
 
                 with open(HISTORY_FILE, "a", encoding="utf-8") as f:
                     f.write(str(user_id) + "\n")
+                sync_to_github(HISTORY_FILE)
 
                 if idx % 10 == 0 or idx == total_users:
                     try:
